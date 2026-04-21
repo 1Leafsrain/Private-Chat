@@ -3,23 +3,39 @@ persistence.py - SQLite: Chat History, Unsent Queue, Users, Offline Messages
 """
 import sqlite3
 import json
+import os
 import time
 from typing import List, Optional
-from config import DB_PATH
+from config import DB_DIR
 from utils.logger import get_logger
 
 log = get_logger("persistence")
 
+# Menyimpan username aktif untuk sesi ini
+_current_username: Optional[str] = None
 
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+
+def set_username(username: str):
+    """Set username aktif untuk sesi ini (dipanggil sekali saat init)."""
+    global _current_username
+    _current_username = username
+
+
+def get_db_path(username: Optional[str] = None) -> str:
+    """Return path DB khusus untuk username ini."""
+    name = username or _current_username or "default"
+    return os.path.join(DB_DIR, f"chat_{name}.db")
+
+
+def _get_conn(username: Optional[str] = None) -> sqlite3.Connection:
+    conn = sqlite3.connect(get_db_path(username), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
-    """Buat semua tabel jika belum ada."""
-    with _get_conn() as conn:
+def init_db(username: Optional[str] = None):
+    """Buat semua tabel jika belum ada (per-user DB)."""
+    with _get_conn(username) as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
                 username      TEXT PRIMARY KEY,
@@ -60,7 +76,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_unsent_seq     ON unsent_queue(seq);
             CREATE INDEX IF NOT EXISTS idx_offline_recip  ON offline_messages(recipient);
         """)
-    log.info(f"Database diinisialisasi: {DB_PATH}")
+    log.info(f"Database diinisialisasi: {get_db_path(username)}")
 
 
 # ─── User Management ────────────────────────────────────────────────────────

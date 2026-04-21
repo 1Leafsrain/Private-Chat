@@ -22,7 +22,9 @@ HEARTBEAT_INTERVAL_SEC  = 5        # Interval kirim heartbeat UDP
 HEARTBEAT_MISS_LIMIT    = 3        # Berapa kali heartbeat boleh hilang sebelum disconnect
 
 # ─── Persistence ────────────────────────────────────────────────────────────
-DB_PATH = "chat_history.db"        # File SQLite untuk history + unsent queue
+DB_DIR  = "."                       # Direktori penyimpanan file DB
+# DB_PATH diatur per-user via get_db_path(username) di persistence.py
+# Format: chat_<username>.db  →  agar A dan B tidak berbagi DB yang sama
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 LOG_FILE        = "chat_app.log"

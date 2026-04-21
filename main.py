@@ -1,4 +1,4 @@
-﻿"""
+"""
 main.py - Client Aplikasi Chat
 ================================
 Cara Penggunaan:
@@ -28,7 +28,7 @@ from typing import List
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import APP_NAME, PROMPT, TCP_PORT
-from persistence import init_db, save_message, mark_acked, get_all_unsent, enqueue_unsent, dequeue_unsent
+from persistence import init_db, save_message, mark_acked, get_all_unsent, enqueue_unsent, dequeue_unsent, set_username
 from message_queue import MessageQueue
 from reliability import ReliabilityLayer
 from tcp_handler import TCPClient
@@ -64,7 +64,8 @@ class ChatApp:
         self._cached_password: str = None   # Cache password untuk auto-login saat reconnect
         self._stop           = threading.Event()
 
-        init_db()
+        set_username(username)
+        init_db(username)
 
         self.msg_queue   = MessageQueue()
         self.reliability = ReliabilityLayer(on_give_up=self._on_message_give_up)
@@ -174,20 +175,22 @@ class ChatApp:
             if item is None:
                 continue
             priority, seq, payload = item
-            if not self.connected or not self._authenticated:
-                enqueue_unsent(seq, payload)
-                log.info(f"Belum terhubung/login, pesan seq={seq} disimpan ke unsent_queue.")
-                self.msg_queue.task_done()
-                continue
             try:
-                self.tcp.send(payload)
-                self.reliability.track(seq, payload, self.tcp.send)
-                log.debug(f"Pesan seq={seq} dikirim ke server.")
-            except Exception as e:
-                log.error(f"Gagal kirim seq={seq}: {e}")
-                enqueue_unsent(seq, payload)
-                self.msg_queue.put_retry(payload, seq)
-            self.msg_queue.task_done()
+                if not self.connected or not self._authenticated:
+                    enqueue_unsent(seq, payload)
+                    log.info(f"Belum terhubung/login, pesan seq={seq} disimpan ke unsent_queue.")
+                    continue
+                try:
+                    self.tcp.send(payload)
+                    self.reliability.track(seq, payload, self.tcp.send)
+                    log.debug(f"Pesan seq={seq} dikirim ke server.")
+                except Exception as e:
+                    log.error(f"Gagal kirim seq={seq}: {e}")
+                    # Simpan ke unsent_queue saja; _resend_unsent() akan kirim ulang
+                    # saat reconnect. JANGAN put_retry agar tidak duplikasi pesan.
+                    enqueue_unsent(seq, payload)
+            finally:
+                self.msg_queue.task_done()
 
     def _resend_unsent(self):
         """Kirim ulang semua pesan yang tersimpan di unsent_queue."""
