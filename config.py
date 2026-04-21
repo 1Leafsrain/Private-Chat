@@ -1,5 +1,5 @@
 """
-config.py - Konfigurasi Aplikasi Chat Private
+config.py - Konfigurasi Aplikasi Chat
 Ubah sesuai kebutuhan sebelum menjalankan aplikasi.
 """
 
@@ -7,9 +7,10 @@ Ubah sesuai kebutuhan sebelum menjalankan aplikasi.
 TCP_PORT        = 5555      # Port untuk chat messages (TCP)
 UDP_PORT        = 5556      # Port untuk heartbeat / control (UDP)
 BUFFER_SIZE     = 65536     # Maksimum ukuran buffer socket
+SERVER_HOST     = "0.0.0.0" # Alamat bind server (0.0.0.0 = semua interface)
 
 # ─── Auth & Security ────────────────────────────────────────────────────────
-PASSWORD        = "rahasiaLAN123"   # Password bersama antara dua client
+# Password per-user disimpan di database (bukan config).
 # Daftar IP yang diizinkan terhubung (kosongkan list untuk menonaktifkan whitelist)
 IP_WHITELIST    = []                # contoh: ["192.168.1.10", "192.168.1.11"]
 
@@ -29,5 +30,5 @@ LOG_MAX_BYTES   = 5 * 1024 * 1024  # 5 MB per file
 LOG_BACKUP_COUNT = 3
 
 # ─── UI ─────────────────────────────────────────────────────────────────────
-APP_NAME    = "SecureChat v1.0"
+APP_NAME    = "SecureChat v2.0"
 PROMPT      = ">> "

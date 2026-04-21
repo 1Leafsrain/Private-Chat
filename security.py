@@ -1,33 +1,35 @@
 """
-security.py - IP Whitelist + Password Authentication (salted SHA-256)
+security.py - IP Whitelist + Per-User Password Hashing
+Setiap user memiliki salt unik yang di-generate saat registrasi.
 """
 import hashlib
 import hmac
-import os
+import secrets
 import ipaddress
-from config import PASSWORD, IP_WHITELIST
+from config import IP_WHITELIST
 from utils.logger import get_logger
 
 log = get_logger("security")
 
-# Salt statis di-derive dari password agar deterministik antar dua peer.
-# Untuk produksi, gunakan salt acak + key-exchange (Diffie-Hellman / TLS).
-_SALT = hashlib.sha256(b"SecureChatSalt_" + PASSWORD.encode()).digest()
+
+def generate_salt() -> str:
+    """Generate salt acak 32-karakter hex untuk setiap user baru."""
+    return secrets.token_hex(16)
 
 
-def hash_password(password: str) -> str:
-    """Return salted HMAC-SHA256 hex digest dari password."""
-    return hmac.new(_SALT, password.encode("utf-8"), hashlib.sha256).hexdigest()
+def hash_password(password: str, salt: str) -> str:
+    """Return HMAC-SHA256 hex digest dari password menggunakan salt unik per user."""
+    return hmac.new(
+        salt.encode("utf-8"),
+        password.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
 
 
-def verify_password(candidate: str) -> bool:
-    """Verifikasi apakah candidate cocok dengan password konfigurasi."""
-    expected = hash_password(PASSWORD)
-    candidate_hash = hash_password(candidate)
-    result = hmac.compare_digest(expected, candidate_hash)
-    if not result:
-        log.warning("Percobaan autentikasi gagal.")
-    return result
+def verify_password(password: str, salt: str, stored_hash: str) -> bool:
+    """Verifikasi password candidate terhadap stored hash."""
+    candidate_hash = hash_password(password, salt)
+    return hmac.compare_digest(candidate_hash, stored_hash)
 
 
 def check_ip_whitelist(ip: str) -> bool:
@@ -46,8 +48,3 @@ def check_ip_whitelist(ip: str) -> bool:
     except ValueError:
         log.error(f"Format IP tidak valid: {ip}")
         return False
-
-
-def get_password_hash() -> str:
-    """Shortcut: kembalikan hash dari password konfigurasi (untuk dikirim saat login)."""
-    return hash_password(PASSWORD)

@@ -1,5 +1,5 @@
 """
-persistence.py - SQLite: Chat History + Unsent Message Queue
+persistence.py - SQLite: Chat History, Unsent Queue, Users, Offline Messages
 """
 import sqlite3
 import json
@@ -18,13 +18,21 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def init_db():
-    """Buat tabel jika belum ada."""
+    """Buat semua tabel jika belum ada."""
     with _get_conn() as conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                username      TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                salt          TEXT NOT NULL,
+                created_at    REAL NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS chat_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 seq         INTEGER NOT NULL,
                 sender      TEXT NOT NULL,
+                recipient   TEXT NOT NULL DEFAULT '',
                 message     TEXT NOT NULL,
                 direction   TEXT NOT NULL CHECK(direction IN ('sent','received')),
                 timestamp   REAL NOT NULL,
@@ -34,27 +42,95 @@ def init_db():
             CREATE TABLE IF NOT EXISTS unsent_queue (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 seq         INTEGER NOT NULL UNIQUE,
-                payload     TEXT NOT NULL,   -- JSON string
+                payload     TEXT NOT NULL,
                 retries     INTEGER NOT NULL DEFAULT 0,
                 created_at  REAL NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_history_seq ON chat_history(seq);
-            CREATE INDEX IF NOT EXISTS idx_unsent_seq  ON unsent_queue(seq);
+            CREATE TABLE IF NOT EXISTS offline_messages (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                seq         INTEGER NOT NULL,
+                sender      TEXT NOT NULL,
+                recipient   TEXT NOT NULL,
+                message     TEXT NOT NULL,
+                timestamp   REAL NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_history_seq    ON chat_history(seq);
+            CREATE INDEX IF NOT EXISTS idx_unsent_seq     ON unsent_queue(seq);
+            CREATE INDEX IF NOT EXISTS idx_offline_recip  ON offline_messages(recipient);
         """)
     log.info(f"Database diinisialisasi: {DB_PATH}")
 
 
-# ─── Chat History ───────────────────────────────────────────────────────────
+# ─── User Management ────────────────────────────────────────────────────────
+
+def register_user(username: str, password_hash: str, salt: str) -> bool:
+    """Simpan user baru ke DB. Return False jika username sudah ada."""
+    try:
+        with _get_conn() as conn:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, salt, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (username, password_hash, salt, time.time())
+            )
+        log.info(f"User '{username}' berhasil didaftarkan.")
+        return True
+    except sqlite3.IntegrityError:
+        log.warning(f"Username '{username}' sudah terdaftar.")
+        return False
+
+
+def get_user(username: str) -> Optional[sqlite3.Row]:
+    """Ambil data user dari DB. Return None jika tidak ditemukan."""
+    with _get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+
+
+# ─── Offline Messages (server-side buffer) ──────────────────────────────────
+
+def save_offline_message(seq: int, sender: str, recipient: str, message: str):
+    """Simpan pesan untuk user yang sedang offline."""
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO offline_messages (seq, sender, recipient, message, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (seq, sender, recipient, message, time.time())
+        )
+    log.debug(f"Offline message dari '{sender}' untuk '{recipient}' disimpan (seq={seq}).")
+
+
+def get_offline_messages(recipient: str) -> List[dict]:
+    """Ambil semua pesan offline untuk user tertentu."""
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, seq, sender, message, timestamp FROM offline_messages "
+            "WHERE recipient = ? ORDER BY timestamp",
+            (recipient,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def clear_offline_messages(recipient: str):
+    """Hapus semua pesan offline yang sudah dikirim ke user."""
+    with _get_conn() as conn:
+        conn.execute("DELETE FROM offline_messages WHERE recipient = ?", (recipient,))
+    log.debug(f"Offline messages untuk '{recipient}' dihapus.")
+
+
+# ─── Chat History ────────────────────────────────────────────────────────────
 
 def save_message(seq: int, sender: str, message: str,
-                 direction: str, timestamp: float, acked: bool = False):
+                 direction: str, timestamp: float, acked: bool = False,
+                 recipient: str = ""):
     with _get_conn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO chat_history "
-            "(seq, sender, message, direction, timestamp, acked) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (seq, sender, message, direction, timestamp, int(acked))
+            "(seq, sender, recipient, message, direction, timestamp, acked) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (seq, sender, recipient, message, direction, timestamp, int(acked))
         )
 
 
@@ -71,7 +147,7 @@ def load_history(limit: int = 50) -> List[sqlite3.Row]:
         ).fetchall()
 
 
-# ─── Unsent Queue ────────────────────────────────────────────────────────────
+# ─── Unsent Queue (client-side) ──────────────────────────────────────────────
 
 def enqueue_unsent(seq: int, payload: dict):
     with _get_conn() as conn:
