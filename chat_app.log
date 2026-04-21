@@ -1,0 +1,16 @@
+[2026-04-21 01:43:56] [INFO   ] [persistence] Database diinisialisasi: chat_history.db
+[2026-04-21 01:43:57] [INFO   ] [message_queue] MessageQueue diinisialisasi.
+[2026-04-21 01:43:57] [DEBUG  ] [message_queue] Enqueued seq=1 priority=0
+[2026-04-21 01:43:57] [INFO   ] [reliability] ReliabilityLayer aktif.
+[2026-04-21 01:43:57] [INFO   ] [reliability] ReliabilityLayer dihentikan.
+[2026-04-21 08:50:04] [INFO   ] [persistence] Database diinisialisasi: chat_history.db
+[2026-04-21 08:50:04] [INFO   ] [message_queue] MessageQueue diinisialisasi.
+[2026-04-21 08:50:04] [INFO   ] [reliability] ReliabilityLayer aktif.
+[2026-04-21 08:50:04] [INFO   ] [tcp_handler] TCP server listening di port 5555
+[2026-04-21 08:50:21] [DEBUG  ] [message_queue] Enqueued seq=1 priority=0
+[2026-04-21 08:50:21] [DEBUG  ] [persistence] Pesan seq=1 masuk ke unsent_queue.
+[2026-04-21 08:50:21] [INFO   ] [main] Belum terhubung, pesan seq=1 disimpan ke unsent_queue.
+[2026-04-21 08:58:50] [DEBUG  ] [message_queue] Enqueued seq=2 priority=0
+[2026-04-21 08:58:50] [DEBUG  ] [persistence] Pesan seq=2 masuk ke unsent_queue.
+[2026-04-21 08:58:50] [INFO   ] [main] Belum terhubung, pesan seq=2 disimpan ke unsent_queue.
+[2026-04-21 08:58:52] [INFO   ] [reliability] ReliabilityLayer dihentikan.
